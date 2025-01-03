@@ -1,0 +1,151 @@
+`timescale  1ns/1ps
+
+module average #(parameter NOF_BITS = 32) (
+    input wire clk,
+    input wire rst_n,
+    input wire start,
+    input wire data_first,
+    input wire data_last,
+    input wire [NOF_BITS-1:0] data_in,
+    output reg [NOF_BITS:0] data_out,
+    output reg busy, 
+    output reg TO,   
+    output reg done    
+);
+    localparam SLEEP = 5'b00001;
+    localparam IDLE = 5'b00010;
+    localparam SUMP = 5'b00100;
+    localparam DEVIDE = 5'b01000;
+    localparam FIN = 5'b10000;
+//state signals
+    reg [4:0] state, next_state;
+//devider signals
+    wire valid;
+    wire start_div;
+    wire done_div;
+    wire busy_div;
+    wire divide_by_zero;
+    reg [NOF_BITS:0] devisor;
+    wire [NOF_BITS:0] next_devisor;
+    wire [NOF_BITS:0] reminder;
+//sum signals
+    wire sum_busy;
+    wire [NOF_BITS:0] localsum;
+    wire [NOF_BITS:0] div_out;
+//local signals
+    reg [NOF_BITS:0] TO_counter;
+    wire [NOF_BITS:0] next_TO_counter;
+    // Next state outputs
+    reg next_busy, next_done;
+
+    always @* begin
+        next_busy = 1'b0;
+        next_done = 1'b0;
+        TO = 1'b0;
+        next_state = state;
+
+        case(state)
+            SLEEP : begin
+                next_state = (start) ? IDLE: SLEEP;
+            end 
+            IDLE : begin
+                if (data_first) 
+                    next_state = SUMP;
+                    next_busy = 1'b1;
+                    if (data_last)
+                        next_state = DEVIDE;
+                else if (TO_counter >= 4'b1010) begin
+                    next_state = SLEEP;
+                    TO = 1'b1;
+                end
+            end
+
+            SUMP : begin
+                next_busy = 1'b1;
+                next_state = (data_last) ? DEVIDE: SUMP;
+            end
+        
+            DEVIDE : begin
+                next_busy = 1'b1;
+                if (done_div) begin
+                    next_state = FIN;
+                    next_done = 1'b1;
+                end
+                else
+                    next_state = DEVIDE;
+            end
+
+            FIN : begin
+                next_done = 1'b1;
+                next_busy = 1'b0;
+                next_state = SLEEP;
+            end
+        endcase
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            devisor <= 1;
+        else if (state == SUMP)
+            devisor <= next_devisor;
+        else if (state == IDLE)
+            devisor <= 1;
+    end
+
+    assign next_devisor = (state == SUMP) ? devisor + 1: 1;
+
+    assign next_TO_counter = (state == IDLE) ? TO_counter + 1: 0;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state <= SLEEP;
+            TO_counter <= 0;
+            busy <= 1'b0;
+            done <= 1'b0;
+        end
+        else begin
+            state <= next_state;
+            TO_counter <= next_TO_counter;
+            done <= next_done;
+            busy <= next_busy;
+        end
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            data_out <= 0;
+        else begin
+            if (valid)
+                data_out <= div_out;
+            else
+                data_out <=0;
+        end
+    end
+
+    Sum #(.NOF_BITS(NOF_BITS)) sum_u (
+        .clk(clk),
+        .rst_n(rst_n),
+        .data_first(data_first),
+        .data_last(data_last),
+        .data_in(data_in),
+        .data_out(localsum),
+        .busy(sum_busy),
+        .done(start_div)
+    );
+    
+    // use this divider for the average calculation 
+    divu_int #(NOF_BITS+1) div ( 
+        .clk(clk),              
+        .rst_n(rst_n),              
+        .start(start_div), // each time this signal is high the run starts again         
+        .busy(busy_div), // busy=1 -  the result isn't ready 
+        .done(done_div), // this signal is high for only one cycle             
+        .valid(valid), // valid result signal
+        .dbz(divide_by_zero), // divide by zero signal
+        .a(localsum), // input
+        .b(devisor), // divider
+        .val(div_out), // result
+        .rem(reminder) // reminder
+    );
+
+endmodule

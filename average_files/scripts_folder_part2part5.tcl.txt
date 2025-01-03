@@ -1,0 +1,39 @@
+set outputFile "../reports/my_summary.txt"
+set part1 [open $outputFile w]
+set file [open "../reports/synthesis/post_opt/report_gates.rpt" r]
+# write to txt file
+puts $part1 "Michael Riabtsev 207430554 Aliza Bruck 332394451"
+puts $part1 "TOPMODULE: average"
+puts $part1 "Period: 1.967"
+
+# set variables
+set cell_name "NAND2"
+set cell_area_name "NOR2"
+set content [read $file]
+set count 0
+set sum_area 0
+
+# count amount of the cell
+foreach line [split $content "\n"] {
+    if {[regexp ^$cell_name\S* $line]} {
+        if {[regexp {^\S+\s+([\d\.]+)} $line match instances]} {
+            set count [expr {$count + $instances}]
+        }
+    }
+}
+
+# add result to txt
+puts $part1 "COUNT:  NAND2   $count"
+# sum the area
+foreach line [split $content "\n"] {
+    if {[regexp "^$cell_area_name\S*?" $line]} {
+        if {[regexp {^\S+\s+\d+\s+([\d\.]+)} $line match area]} {
+            set sum_area [expr {$sum_area + $area}]
+        }
+        
+    }
+}
+puts $part1 "Area: $cell_area_name $sum_area"
+
+close $file
+close $part1

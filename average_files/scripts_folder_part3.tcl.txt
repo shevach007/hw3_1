@@ -1,0 +1,42 @@
+set outputFile "../reports/my_summary_pwr.txt"
+set part1 [open $outputFile w]
+set file [open "../export/pwr/power.rpt" r]
+# write to txt file
+puts $part1 "Michael Riabtsev 207430554 Aliza Bruck 332394451"
+puts $part1 "TOPMODULE: average"
+puts $part1 "Frequency: 500 MHz"
+
+
+# set variables
+
+set content [read $file]
+set power 0
+set max_pwr 0
+set max_gate ""
+
+# count amount of the cell
+foreach line [split $content "\n"] {    
+    if {[regexp {^Total.*?\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s*$} $line match num1 num2 num3]} {
+        set power [expr {$num2}]
+    }
+}
+puts $part1 "Total Power: $power uW"
+
+# find max power gate
+foreach line [split $content "\n"] {    
+    if {[regexp {^(\S+)\s+\S+\s+\S+\s+([\d\.eE+-]+)} $line match name num3]} {
+        puts $line
+        puts $num3
+        if {$max_pwr < $num3} {
+            puts $num3
+            puts $max_pwr
+            set max_pwr $num3
+            set max_gate $name
+            puts $max_gate
+        }
+    }
+}
+puts $part1 "Most Hungry Power Gate: $max_gate"
+
+close $file
+close $part1
